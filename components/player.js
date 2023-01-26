@@ -56,7 +56,7 @@ export const Player = ({ index, timers, updateFunction }) => {
             -10
           </button>
           <p className="text-xl font-bold text-gray-300">
-            {timers[index] / 10}
+            {timers[index] == null ? "not on cd" : timers[index] / 10}
           </p>
         </div>
       </div>

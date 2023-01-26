@@ -43,7 +43,11 @@ export default function Example() {
           if (timer == null) {
             return null;
           }
-          return Math.max(timer - 1, 0);
+          let res = Math.max(timer - 1, 0);
+          if (res == 0) {
+            return null;
+          }
+          return res;
         });
       });
     }, 100);
