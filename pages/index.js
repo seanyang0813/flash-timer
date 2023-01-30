@@ -22,7 +22,7 @@ export default function Example() {
       console.log("updating flash: ", new_timers);
       socket.emit("update-flash", { room: room, timers: new_timers });
       // assign self as latest updated leader
-      setIsLeader(true);
+      //setIsLeader(true);
     };
   }
 
@@ -33,7 +33,7 @@ export default function Example() {
     socket.on("sync", (data) => {
       console.log("syncing timers: ", data.timers);
       setTimers(data.timers);
-      setIsLeader(false);
+      //setIsLeader(false);
     });
 
     socket.on("room-number", (room) => {

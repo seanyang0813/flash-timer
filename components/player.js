@@ -43,21 +43,30 @@ export const Player = ({ index, timers, updateFunction }) => {
       <div className="col-span-2 row-span-1">
         <h1 className="text-xl font-bold text-gray-300">{role}</h1>
         <div className="justify-center flex">
-          <button>
-            <Image
-              src={flashImg}
-              width={50}
-              height={50}
-              alt={"flash icon"}
-              onClick={() => use_flash()}
-            ></Image>
-          </button>
-          <button className="text-gray-300" onClick={subtract_10_sec}>
-            -10
-          </button>
-          <p className="text-xl font-bold text-gray-300">
-            {timers[index] == null ? "not on cd" : timers[index] / 10}
-          </p>
+          <div>
+            <button>
+              <Image
+                src={flashImg}
+                width={50}
+                height={50}
+                alt={"flash icon"}
+                onClick={() => use_flash()}
+              ></Image>
+            </button>
+            <div>
+              <button
+                className="text-gray-300 bg-blue-500 hover:bg-blue-700  font-bold px-4 rounded"
+                onClick={subtract_10_sec}
+              >
+                -10
+              </button>
+            </div>
+            <p className="text-xl font-bold text-gray-300">
+              {timers[index] == null
+                ? "not on cd"
+                : Math.floor(timers[index] / 10)}
+            </p>
+          </div>
         </div>
       </div>
     </div>
