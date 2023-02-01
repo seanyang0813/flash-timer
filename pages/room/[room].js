@@ -8,8 +8,8 @@ import io from "socket.io-client";
 import { useEffect, useState, useRef } from "react";
 import { setConstantValue } from "typescript";
 
-//const socket = io("https://flash-timer-server-production.up.railway.app/");
-const socket = io("http://localhost:3001");
+const socket = io("https://flash-timer-server-production.up.railway.app/");
+// const socket = io("http://localhost:3001");
 
 export default function Room() {
   const [timers, setTimers] = useState([null, null, null, null, null]);
