@@ -32,19 +32,21 @@ export const Player = ({ index, timers, updateFunction }) => {
   }
 
   return (
-    <div className="grid grid-cols-3 grid-rows-2">
-      <div className="col-span-1 row-span-2">
-        <Image
-          className="object-contain rounded-full"
-          src={role_image_map[role]}
-          alt={role}
-        ></Image>
-      </div>
-      <div className="col-span-2 row-span-1">
-        <h1 className="text-xl font-bold text-gray-300">{role}</h1>
-        <div className="justify-center flex">
-          <div>
-            <button>
+    <div>
+      <div className="grid grid-cols-3">
+        <div className="col-span-1 row-span-2 ">
+          <Image
+            className="object-contain rounded-full"
+            src={role_image_map[role]}
+            alt={role}
+          ></Image>
+        </div>
+        <div className="col-span-2 row-span-1 ">
+          <div className="flex flex-col justify-center justify-items-center content-center items-center">
+            <h1 className="text-xl font-bold content-center text-gray-300 m-1">
+              {role}
+            </h1>
+            <button className="m-1">
               <Image
                 src={flashImg}
                 width={50}
@@ -53,14 +55,12 @@ export const Player = ({ index, timers, updateFunction }) => {
                 onClick={() => use_flash()}
               ></Image>
             </button>
-            <div>
-              <button
-                className="text-gray-300 bg-blue-500 hover:bg-blue-700  font-bold px-4 rounded"
-                onClick={subtract_10_sec}
-              >
-                -10
-              </button>
-            </div>
+            <button
+              className="text-gray-300 bg-blue-500 hover:bg-blue-700  font-bold px-4 rounded m-1"
+              onClick={subtract_10_sec}
+            >
+              -10
+            </button>
             <p className="text-xl font-bold text-gray-300">
               {timers[index] == null
                 ? "not on cd"

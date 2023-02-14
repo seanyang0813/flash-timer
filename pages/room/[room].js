@@ -94,17 +94,15 @@ export default function Room() {
   }, [timers]);
 
   return (
-    <div className="grid grid-rows-5 grid-flow-row-dense bg-slate-900 h-screen p-6 ">
-      <div className="text-grey-darker text-center bg-grey-light px-4 py-2 m-2">
-        {Array.from({ length: 5 }, (_, index) => (
-          <Player
-            key={index}
-            index={index}
-            timers={timers}
-            updateFunction={updateFunctionOnIndex(index)}
-          ></Player>
-        ))}
-      </div>
+    <div className="grid grid-rows-5 bg-slate-900 min-h-screen max-h-screen overflow-hidden p-10">
+      {Array.from({ length: 5 }, (_, index) => (
+        <Player
+          key={index}
+          index={index}
+          timers={timers}
+          updateFunction={updateFunctionOnIndex(index)}
+        ></Player>
+      ))}
     </div>
   );
 }
