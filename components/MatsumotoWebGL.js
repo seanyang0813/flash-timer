@@ -2,10 +2,16 @@ import { useEffect, useRef, useState } from 'react';
 import { VERTEX_SHADER, FRAGMENT_SHADER } from '../lib/matsumotoShaders';
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+const distanceBetween = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 
 function WebGLStage({ scene, twist, m, n, proof }) {
   const canvasRef = useRef(null);
   const valuesRef = useRef({ scene, twist, m, n, proof });
+  const commandsRef = useRef({
+    zoomIn: () => {},
+    zoomOut: () => {},
+    reset: () => {},
+  });
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -94,21 +100,37 @@ function WebGLStage({ scene, twist, m, n, proof }) {
       { yaw: 0.48, pitch: -0.18, zoom: 4.45 },
       { yaw: 0.30, pitch: -0.12, zoom: 5.30 },
     ];
+    const isMobile = () => window.innerWidth < 760;
+    const presetZoom = (sceneIndex) => presets[sceneIndex].zoom + (isMobile() ? 0.78 : 0);
     const camera = {
       yaw: presets[scene].yaw,
       pitch: presets[scene].pitch,
-      zoom: presets[scene].zoom,
+      zoom: presetZoom(scene),
       targetYaw: presets[scene].yaw,
       targetPitch: presets[scene].pitch,
-      targetZoom: presets[scene].zoom,
+      targetZoom: presetZoom(scene),
       lastScene: scene,
       idleSince: performance.now(),
     };
     const smoothValues = { twist, m, n, proof };
-    const drag = { active: false, x: 0, y: 0, yaw: 0, pitch: 0 };
+    const pointers = new Map();
+    const gesture = {
+      mode: 'none',
+      startX: 0,
+      startY: 0,
+      startYaw: 0,
+      startPitch: 0,
+      startDistance: 0,
+      startZoom: camera.targetZoom,
+      downAt: 0,
+      moved: false,
+      lastTapAt: 0,
+      lastTapX: 0,
+      lastTapY: 0,
+    };
 
     const resize = () => {
-      const mobile = window.innerWidth < 760;
+      const mobile = isMobile();
       const renderScale = mobile ? 0.58 : 0.76;
       const pixelRatio = Math.min(window.devicePixelRatio || 1, 1.45) * renderScale;
       const width = Math.max(1, Math.round(canvas.clientWidth * pixelRatio));
@@ -124,48 +146,138 @@ function WebGLStage({ scene, twist, m, n, proof }) {
       const next = presets[sceneIndex];
       camera.targetYaw = next.yaw;
       camera.targetPitch = next.pitch;
-      camera.targetZoom = next.zoom;
+      camera.targetZoom = presetZoom(sceneIndex);
       camera.idleSince = performance.now();
+    };
+
+    const nudgeZoom = (amount) => {
+      camera.targetZoom = clamp(camera.targetZoom + amount, 2.72, 8.60);
+      camera.idleSince = performance.now();
+    };
+
+    commandsRef.current = {
+      zoomIn: () => nudgeZoom(-0.52),
+      zoomOut: () => nudgeZoom(0.52),
+      reset: () => resetCamera(),
+    };
+
+    const beginOrbit = (pointer) => {
+      gesture.mode = 'orbit';
+      gesture.startX = pointer.x;
+      gesture.startY = pointer.y;
+      gesture.startYaw = camera.targetYaw;
+      gesture.startPitch = camera.targetPitch;
+      gesture.downAt = performance.now();
+      gesture.moved = false;
+    };
+
+    const beginPinch = () => {
+      const pair = Array.from(pointers.values()).slice(0, 2);
+      if (pair.length < 2) return;
+      gesture.mode = 'pinch';
+      gesture.startDistance = Math.max(1, distanceBetween(pair[0], pair[1]));
+      gesture.startZoom = camera.targetZoom;
+      gesture.moved = true;
+    };
+
+    const continueAfterPointerChange = () => {
+      if (pointers.size >= 2) {
+        beginPinch();
+        return;
+      }
+      if (pointers.size === 1) {
+        beginOrbit(Array.from(pointers.values())[0]);
+        gesture.moved = true;
+        return;
+      }
+      gesture.mode = 'none';
     };
 
     const onPointerDown = (event) => {
-      drag.active = true;
-      drag.x = event.clientX;
-      drag.y = event.clientY;
-      drag.yaw = camera.targetYaw;
-      drag.pitch = camera.targetPitch;
-      camera.idleSince = performance.now();
+      event.preventDefault();
       canvas.setPointerCapture?.(event.pointerId);
+      pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      camera.idleSince = performance.now();
+      if (pointers.size === 1) beginOrbit(pointers.get(event.pointerId));
+      if (pointers.size === 2) beginPinch();
     };
 
     const onPointerMove = (event) => {
-      if (!drag.active) return;
-      camera.targetYaw = drag.yaw + (event.clientX - drag.x) * 0.008;
+      if (!pointers.has(event.pointerId)) return;
+      event.preventDefault();
+      pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      camera.idleSince = performance.now();
+
+      if (pointers.size >= 2) {
+        if (gesture.mode !== 'pinch') beginPinch();
+        const pair = Array.from(pointers.values()).slice(0, 2);
+        const currentDistance = Math.max(1, distanceBetween(pair[0], pair[1]));
+        const ratio = gesture.startDistance / currentDistance;
+        camera.targetZoom = clamp(
+          gesture.startZoom * Math.pow(ratio, 0.92),
+          2.72,
+          8.60
+        );
+        return;
+      }
+
+      if (gesture.mode !== 'orbit') beginOrbit(pointers.get(event.pointerId));
+      const deltaX = event.clientX - gesture.startX;
+      const deltaY = event.clientY - gesture.startY;
+      if (Math.hypot(deltaX, deltaY) > 4) gesture.moved = true;
+      camera.targetYaw = gesture.startYaw + deltaX * 0.008;
       camera.targetPitch = clamp(
-        drag.pitch + (event.clientY - drag.y) * 0.006,
+        gesture.startPitch + deltaY * 0.006,
         -1.15,
         1.15
       );
-      camera.idleSince = performance.now();
     };
 
-    const stopDrag = (event) => {
-      drag.active = false;
+    const stopPointer = (event, cancelled = false) => {
+      if (!pointers.has(event.pointerId)) return;
+      const wasOnlyPointer = pointers.size === 1;
+      const point = pointers.get(event.pointerId);
+      const now = performance.now();
+      const isTap = !cancelled
+        && wasOnlyPointer
+        && !gesture.moved
+        && now - gesture.downAt < 280;
+
+      pointers.delete(event.pointerId);
       canvas.releasePointerCapture?.(event.pointerId);
-      camera.idleSince = performance.now();
+      camera.idleSince = now;
+
+      if (isTap) {
+        const closeToLastTap = Math.hypot(
+          point.x - gesture.lastTapX,
+          point.y - gesture.lastTapY
+        ) < 32;
+        if (now - gesture.lastTapAt < 340 && closeToLastTap) {
+          resetCamera();
+          gesture.lastTapAt = 0;
+        } else {
+          gesture.lastTapAt = now;
+          gesture.lastTapX = point.x;
+          gesture.lastTapY = point.y;
+        }
+      }
+
+      continueAfterPointerChange();
     };
 
+    const onPointerUp = (event) => stopPointer(event, false);
+    const onPointerCancel = (event) => stopPointer(event, true);
     const onWheel = (event) => {
       event.preventDefault();
-      camera.targetZoom = clamp(camera.targetZoom + event.deltaY * 0.0035, 3.35, 7.2);
+      camera.targetZoom = clamp(camera.targetZoom + event.deltaY * 0.0035, 2.72, 8.60);
       camera.idleSince = performance.now();
     };
-
     const onDoubleClick = () => resetCamera();
+
     canvas.addEventListener('pointerdown', onPointerDown);
     canvas.addEventListener('pointermove', onPointerMove);
-    canvas.addEventListener('pointerup', stopDrag);
-    canvas.addEventListener('pointercancel', stopDrag);
+    canvas.addEventListener('pointerup', onPointerUp);
+    canvas.addEventListener('pointercancel', onPointerCancel);
     canvas.addEventListener('wheel', onWheel, { passive: false });
     canvas.addEventListener('dblclick', onDoubleClick);
     window.addEventListener('resize', resize);
@@ -182,7 +294,7 @@ function WebGLStage({ scene, twist, m, n, proof }) {
         camera.lastScene = values.scene;
         resetCamera(values.scene);
       }
-      if (!drag.active && now - camera.idleSince > 1800) {
+      if (pointers.size === 0 && now - camera.idleSince > 1800) {
         camera.targetYaw += dt * 0.000055;
       }
 
@@ -216,12 +328,17 @@ function WebGLStage({ scene, twist, m, n, proof }) {
       window.removeEventListener('resize', resize);
       canvas.removeEventListener('pointerdown', onPointerDown);
       canvas.removeEventListener('pointermove', onPointerMove);
-      canvas.removeEventListener('pointerup', stopDrag);
-      canvas.removeEventListener('pointercancel', stopDrag);
+      canvas.removeEventListener('pointerup', onPointerUp);
+      canvas.removeEventListener('pointercancel', onPointerCancel);
       canvas.removeEventListener('wheel', onWheel);
       canvas.removeEventListener('dblclick', onDoubleClick);
       gl.deleteBuffer(buffer);
       gl.deleteProgram(program);
+      commandsRef.current = {
+        zoomIn: () => {},
+        zoomOut: () => {},
+        reset: () => {},
+      };
     };
   }, []);
 
@@ -232,6 +349,33 @@ function WebGLStage({ scene, twist, m, n, proof }) {
         className="webgl-stage"
         aria-label="Orbitable WebGL visualization of the Matsumoto power-twist theorem"
       />
+      <div className="camera-controls" aria-label="Camera controls">
+        <button
+          type="button"
+          aria-label="Zoom out"
+          title="Zoom out"
+          onClick={() => commandsRef.current.zoomOut()}
+        >
+          −
+        </button>
+        <button
+          type="button"
+          className="reset-camera"
+          aria-label="Reset camera"
+          title="Reset camera"
+          onClick={() => commandsRef.current.reset()}
+        >
+          ↺
+        </button>
+        <button
+          type="button"
+          aria-label="Zoom in"
+          title="Zoom in"
+          onClick={() => commandsRef.current.zoomIn()}
+        >
+          +
+        </button>
+      </div>
       {error && <div className="webgl-error">{error}</div>}
     </>
   );
