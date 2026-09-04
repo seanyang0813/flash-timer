@@ -94,21 +94,30 @@ function WebGLStage({ scene, twist, m, n, proof }) {
       zoom: uniform('uZoom'),
     };
 
-    const presets = [
+    const desktopPresets = [
       { yaw: 0.34, pitch: -0.20, zoom: 4.65 },
       { yaw: 0.20, pitch: -0.10, zoom: 5.20 },
       { yaw: 0.48, pitch: -0.18, zoom: 4.45 },
       { yaw: 0.30, pitch: -0.12, zoom: 5.30 },
     ];
+    const mobilePresets = [
+      { yaw: 0.34, pitch: -0.20, zoom: 6.15 },
+      { yaw: 0.20, pitch: -0.10, zoom: 8.10 },
+      { yaw: 0.48, pitch: -0.18, zoom: 5.70 },
+      { yaw: 0.30, pitch: -0.12, zoom: 7.35 },
+    ];
     const isMobile = () => window.innerWidth < 760;
-    const presetZoom = (sceneIndex) => presets[sceneIndex].zoom + (isMobile() ? 0.78 : 0);
+    const getPreset = (sceneIndex) => (
+      isMobile() ? mobilePresets[sceneIndex] : desktopPresets[sceneIndex]
+    );
+    const initialPreset = getPreset(scene);
     const camera = {
-      yaw: presets[scene].yaw,
-      pitch: presets[scene].pitch,
-      zoom: presetZoom(scene),
-      targetYaw: presets[scene].yaw,
-      targetPitch: presets[scene].pitch,
-      targetZoom: presetZoom(scene),
+      yaw: initialPreset.yaw,
+      pitch: initialPreset.pitch,
+      zoom: initialPreset.zoom,
+      targetYaw: initialPreset.yaw,
+      targetPitch: initialPreset.pitch,
+      targetZoom: initialPreset.zoom,
       lastScene: scene,
       idleSince: performance.now(),
     };
@@ -129,6 +138,26 @@ function WebGLStage({ scene, twist, m, n, proof }) {
       lastTapY: 0,
     };
 
+    const resetCamera = (sceneIndex = valuesRef.current.scene) => {
+      const next = getPreset(sceneIndex);
+      camera.targetYaw = next.yaw;
+      camera.targetPitch = next.pitch;
+      camera.targetZoom = next.zoom;
+      camera.idleSince = performance.now();
+    };
+
+    const nudgeZoom = (amount) => {
+      camera.targetZoom = clamp(camera.targetZoom + amount, 2.72, 10.50);
+      camera.idleSince = performance.now();
+    };
+
+    commandsRef.current = {
+      zoomIn: () => nudgeZoom(-0.62),
+      zoomOut: () => nudgeZoom(0.62),
+      reset: () => resetCamera(),
+    };
+
+    let previousMobileState = isMobile();
     const resize = () => {
       const mobile = isMobile();
       const renderScale = mobile ? 0.58 : 0.76;
@@ -140,25 +169,10 @@ function WebGLStage({ scene, twist, m, n, proof }) {
         canvas.height = height;
         gl.viewport(0, 0, width, height);
       }
-    };
-
-    const resetCamera = (sceneIndex = valuesRef.current.scene) => {
-      const next = presets[sceneIndex];
-      camera.targetYaw = next.yaw;
-      camera.targetPitch = next.pitch;
-      camera.targetZoom = presetZoom(sceneIndex);
-      camera.idleSince = performance.now();
-    };
-
-    const nudgeZoom = (amount) => {
-      camera.targetZoom = clamp(camera.targetZoom + amount, 2.72, 8.60);
-      camera.idleSince = performance.now();
-    };
-
-    commandsRef.current = {
-      zoomIn: () => nudgeZoom(-0.52),
-      zoomOut: () => nudgeZoom(0.52),
-      reset: () => resetCamera(),
+      if (mobile !== previousMobileState) {
+        previousMobileState = mobile;
+        resetCamera();
+      }
     };
 
     const beginOrbit = (pointer) => {
@@ -216,7 +230,7 @@ function WebGLStage({ scene, twist, m, n, proof }) {
         camera.targetZoom = clamp(
           gesture.startZoom * Math.pow(ratio, 0.92),
           2.72,
-          8.60
+          10.50
         );
         return;
       }
@@ -269,7 +283,11 @@ function WebGLStage({ scene, twist, m, n, proof }) {
     const onPointerCancel = (event) => stopPointer(event, true);
     const onWheel = (event) => {
       event.preventDefault();
-      camera.targetZoom = clamp(camera.targetZoom + event.deltaY * 0.0035, 2.72, 8.60);
+      camera.targetZoom = clamp(
+        camera.targetZoom + event.deltaY * 0.0035,
+        2.72,
+        10.50
+      );
       camera.idleSince = performance.now();
     };
     const onDoubleClick = () => resetCamera();
