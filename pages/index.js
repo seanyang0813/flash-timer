@@ -1,228 +1,333 @@
 import Head from 'next/head';
-import { useEffect, useState } from 'react';
-import WebGLStage from '../components/MatsumotoWebGL';
+import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/router';
+import DehnTwistWebGL from '../components/DehnTwistWebGL';
+import FlattenTwist from '../components/FlattenTwist';
+import BarbellProof from '../components/BarbellProof';
 
-const SCENES = [
-  { tag: 'DEHN TWIST', title: 'Twist the fiber.', formula: 'Wₙ = F · Fᵈⁿ' },
-  { tag: 'CLASSIFICATION', title: 'Only |n| survives.', formula: 'Wₘ ≅ Wₙ  ⇔  |m| = |n|' },
-  { tag: 'EXTENSION', title: 'The twist escapes.', formula: 'Φ|Σ = d   ⇒   E = ℤ' },
-  { tag: 'RESULT', title: 'One manifold. Infinite fibrations.', formula: 'Xₙ ≅⁺ E(1,1),  ∀n ∈ ℤ' },
-];
+const MIN_N = -6;
+const MAX_N = 6;
+const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+const ease = (value) => {
+  const t = clamp(value, 0, 1);
+  return t * t * (3 - 2 * t);
+};
 
-export default function MatsumotoThreeD() {
-  const [scene, setScene] = useState(0);
-  const [twist, setTwist] = useState(2);
-  const [m, setM] = useState(-3);
-  const [n, setN] = useState(3);
-  const [proof, setProof] = useState(0);
-  const [playing, setPlaying] = useState(false);
-  const [scopeOpen, setScopeOpen] = useState(false);
-  const meta = SCENES[scene];
-  const equivalent = Math.abs(m) === Math.abs(n);
-
-  useEffect(() => {
-    const onKey = (event) => {
-      if (event.key === 'Escape') setScopeOpen(false);
-      if (scopeOpen) return;
-      if (event.key === 'ArrowRight' || event.key === 'PageDown') {
-        setScene((current) => Math.min(3, current + 1));
-      }
-      if (event.key === 'ArrowLeft' || event.key === 'PageUp') {
-        setScene((current) => Math.max(0, current - 1));
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [scopeOpen]);
+function useSteppedTwist(target, instant) {
+  const animationRef = useRef({
+    target,
+    value: target,
+    from: target,
+    to: target,
+    phase: 1,
+    active: false,
+    waitUntil: 0,
+    instant,
+  });
+  const [visual, setVisual] = useState({
+    value: target,
+    pulse: 0,
+    from: target,
+    to: target,
+    animating: false,
+  });
 
   useEffect(() => {
-    if (scene !== 2) {
-      setPlaying(false);
-      return;
+    const state = animationRef.current;
+    state.target = target;
+    state.instant = instant;
+    if (instant) {
+      state.value = target;
+      state.from = target;
+      state.to = target;
+      state.phase = 1;
+      state.active = false;
+      setVisual({ value: target, pulse: 0, from: target, to: target, animating: false });
     }
-    setProof(0);
-    setPlaying(true);
-  }, [scene]);
+  }, [target, instant]);
 
   useEffect(() => {
-    if (!playing) return undefined;
     let frameId;
     let previous = performance.now();
-    const advance = (now) => {
+    const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+    const frame = (now) => {
+      const state = animationRef.current;
       const delta = Math.min(50, now - previous);
       previous = now;
-      setProof((current) => {
-        const next = Math.min(1, current + delta / 7200);
-        if (next >= 1) setPlaying(false);
-        return next;
-      });
-      frameId = requestAnimationFrame(advance);
-    };
-    frameId = requestAnimationFrame(advance);
-    return () => cancelAnimationFrame(frameId);
-  }, [playing]);
 
-  const proofPhase = proof < 0.32
-    ? 'MATCHING SPHERE'
-    : proof < 0.66
-      ? '−1 − 1 + 2 = 0'
-      : 'BARBELL ⇒ d';
+      if (state.instant || reducedMotion) {
+        if (state.value !== state.target || state.active) {
+          state.value = state.target;
+          state.from = state.target;
+          state.to = state.target;
+          state.phase = 1;
+          state.active = false;
+          setVisual({ value: state.target, pulse: 0, from: state.target, to: state.target, animating: false });
+        }
+        frameId = requestAnimationFrame(frame);
+        return;
+      }
+
+      if (!state.active && now >= state.waitUntil && Math.round(state.value) !== state.target) {
+        state.from = Math.round(state.value);
+        state.to = state.from + Math.sign(state.target - state.from);
+        state.phase = 0;
+        state.active = true;
+      }
+
+      if (state.active) {
+        state.phase = Math.min(1, state.phase + delta / 1120);
+        const curvePhase = ease(clamp((state.phase - 0.12) / 0.76, 0, 1));
+        state.value = state.from + (state.to - state.from) * curvePhase;
+        const pulse = Math.sin(Math.PI * state.phase);
+        setVisual({
+          value: state.value,
+          pulse,
+          from: state.from,
+          to: state.to,
+          animating: true,
+        });
+
+        if (state.phase >= 1) {
+          state.value = state.to;
+          state.active = false;
+          state.waitUntil = now + 135;
+          setVisual({
+            value: state.value,
+            pulse: 0,
+            from: state.to,
+            to: state.to,
+            animating: state.value !== state.target,
+          });
+        }
+      }
+
+      frameId = requestAnimationFrame(frame);
+    };
+
+    frameId = requestAnimationFrame(frame);
+    return () => cancelAnimationFrame(frameId);
+  }, []);
+
+  return visual;
+}
+
+function Power({ base = 'd', exponent }) {
+  return <>{base}<sup>{exponent}</sup></>;
+}
+
+function WordFormula({ n }) {
+  return (
+    <span>
+      W<sub>{n}</sub> = F F<sup><Power exponent={n} /></sup>
+    </span>
+  );
+}
+
+export default function MatsumotoClarity() {
+  const router = useRouter();
+  const [selectedN, setSelectedN] = useState(0);
+  const [view, setView] = useState('3d');
+  const [clean, setClean] = useState(false);
+  const [proofOpen, setProofOpen] = useState(false);
+
+  useEffect(() => {
+    if (!router.isReady) return;
+    const rawN = Array.isArray(router.query.n) ? router.query.n[0] : router.query.n;
+    const parsedN = Number.parseInt(rawN ?? '0', 10);
+    if (Number.isFinite(parsedN)) setSelectedN(clamp(parsedN, MIN_N, MAX_N));
+    const rawView = Array.isArray(router.query.view) ? router.query.view[0] : router.query.view;
+    setView(rawView === 'flat' ? 'flat' : '3d');
+    const rawClean = Array.isArray(router.query.clean) ? router.query.clean[0] : router.query.clean;
+    setClean(rawClean === '1');
+  }, [router.isReady, router.query.clean, router.query.n, router.query.view]);
+
+  useEffect(() => {
+    if (!router.isReady || clean || typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    url.searchParams.set('n', String(selectedN));
+    url.searchParams.set('view', view === 'flat' ? 'flat' : '3d');
+    url.searchParams.delete('clean');
+    window.history.replaceState(null, '', url.toString());
+  }, [clean, router.isReady, selectedN, view]);
+
+  const visual = useSteppedTwist(selectedN, clean);
+  const absoluteN = Math.abs(selectedN);
+  const displayedStep = visual.animating ? visual.to : selectedN;
+  const messLabel = selectedN < 0 ? 'Mess content magnitude' : 'Mess content';
+
+  const visualElement = view === 'flat'
+    ? (
+      <FlattenTwist
+        twist={visual.value}
+        pulse={visual.pulse}
+        targetN={displayedStep}
+        clean={clean}
+      />
+    )
+    : (
+      <DehnTwistWebGL
+        twist={visual.value}
+        pulse={visual.pulse}
+        targetN={displayedStep}
+        clean={clean}
+      />
+    );
+
+  if (clean) {
+    return (
+      <>
+        <Head>
+          <title>Dehn twist d^{selectedN}</title>
+          <meta name="theme-color" content="#05070c" />
+          <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+        </Head>
+        <main className="clean-capture">{visualElement}</main>
+      </>
+    );
+  }
 
   return (
     <>
       <Head>
-        <title>Matsumoto 3D</title>
+        <title>Matsumoto power twists — visual theorem</title>
         <meta
           name="description"
-          content="A real-time WebGL explanation of one smooth four-manifold carrying infinitely many genus-two Lefschetz fibrations."
+          content="A mathematically explicit visualization of the separating Dehn twist d^n, the |n| fibration classification, and the fixed total space E(1,1)."
         />
-        <meta name="theme-color" content="#05060e" />
+        <meta name="theme-color" content="#05070c" />
         <meta
           name="viewport"
-          content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
+          content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content"
         />
       </Head>
 
-      <div className="experience">
-        <WebGLStage scene={scene} twist={twist} m={m} n={n} proof={proof} />
-        <div className="vignette" />
-        <div className="grain" />
-
-        <header>
-          <button className="brand" onClick={() => setScene(0)}>
+      <div className="clarity-page">
+        <header className="clarity-header">
+          <button className="clarity-brand" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
             <i />
-            <span>MATSUMOTO 3D</span>
+            <span>MATSUMOTO POWER TWISTS</span>
           </button>
-          <div className="engine"><b />REAL WEBGL</div>
-          <button className="scope-button" onClick={() => setScopeOpen(true)}>
-            proof + scope
-          </button>
+          <div className="view-toggle" aria-label="Visualization mode">
+            <button className={view === '3d' ? 'active' : ''} onClick={() => setView('3d')}>3D surface</button>
+            <button className={view === 'flat' ? 'active' : ''} onClick={() => setView('flat')}>Flatten twist</button>
+          </div>
         </header>
 
-        <main key={scene}>
-          <div className="copy">
-            <span>{meta.tag}</span>
-            <h1>{meta.title}</h1>
-            <p>{meta.formula}</p>
-          </div>
-
-          {scene === 0 && (
-            <div className="controls twist-controls">
-              <button onClick={() => setTwist((value) => Math.max(-6, value - 1))}>−</button>
-              <strong>n = {twist}</strong>
-              <button onClick={() => setTwist((value) => Math.min(6, value + 1))}>+</button>
-              <div className="twist-range">
-                <span>−6</span>
-                <input
-                  aria-label="Twist exponent n"
-                  type="range"
-                  min="-6"
-                  max="6"
-                  value={twist}
-                  onChange={(event) => setTwist(Number(event.target.value))}
-                />
-                <span>+6</span>
-              </div>
-            </div>
-          )}
-
-          {scene === 1 && (
-            <div className={`controls compare-controls ${equivalent ? 'equivalent' : 'different'}`}>
-              <label>
-                <span>m</span>
-                <input
-                  aria-label="m"
-                  type="range"
-                  min="-5"
-                  max="5"
-                  value={m}
-                  onChange={(event) => setM(Number(event.target.value))}
-                />
-                <b>{m}</b>
-              </label>
-              <em>{equivalent ? '≅' : '≄'}</em>
-              <label>
-                <span>n</span>
-                <input
-                  aria-label="n"
-                  type="range"
-                  min="-5"
-                  max="5"
-                  value={n}
-                  onChange={(event) => setN(Number(event.target.value))}
-                />
-                <b>{n}</b>
-              </label>
-            </div>
-          )}
-
-          {scene === 2 && (
-            <div className="controls proof-controls">
-              <button
-                onClick={() => {
-                  if (proof >= 1) setProof(0);
-                  setPlaying((value) => !value);
-                }}
-              >
-                {proof >= 1 ? '↻' : playing ? 'Ⅱ' : '▶'}
-              </button>
-              <input
-                aria-label="Proof animation progress"
-                type="range"
-                min="0"
-                max="1"
-                step="0.001"
-                value={proof}
-                onChange={(event) => {
-                  setPlaying(false);
-                  setProof(Number(event.target.value));
-                }}
-              />
-              <b>{proofPhase}</b>
-            </div>
-          )}
-
-          {scene === 3 && (
-            <div className="result-control">
-              <span>W₀, W₁, W₂, …</span>
-              <button onClick={() => setScopeOpen(true)}>open theorem</button>
-            </div>
-          )}
-        </main>
-
-        <nav aria-label="Scenes">
-          {SCENES.map((item, index) => (
-            <button
-              key={item.tag}
-              className={scene === index ? 'active' : ''}
-              onClick={() => setScene(index)}
-              aria-label={`Scene ${index + 1}: ${item.tag}`}
-            >
-              <i />
-              <span>0{index + 1}</span>
-            </button>
-          ))}
-        </nav>
-
-        <div className="orbit-hint">one finger orbit · two fingers zoom · ↺ reset</div>
-
-        <aside className={scopeOpen ? 'open' : ''}>
-          <button className="backdrop" onClick={() => setScopeOpen(false)} aria-label="Close" />
-          <section>
-            <button className="close" onClick={() => setScopeOpen(false)}>×</button>
-            <span>THE PRECISE CLAIM</span>
-            <h2>W<sub>m</sub> ≅ W<sub>n</sub> <i>⇔</i> |m| = |n|</h2>
-            <div className="theorem-grid">
-              <article><b>01</b><h3>Extend</h3><p>Φ|<sub>Σ</sub> = d with product normal action, hence E = ℤ.</p></article>
-              <article><b>02</b><h3>Forget the marking</h3><p>X<sub>n</sub> ≅<sup>+</sup> X<sub>0</sub> ≅<sup>+</sup> E(1,1) for every n.</p></article>
-              <article><b>03</b><h3>Keep the fibration</h3><p>W₀, W₁, W₂, … are pairwise nonisomorphic oriented genus-two fibrations.</p></article>
-            </div>
-            <h4>transport → framing repair → square-zero cuffs → barbell → d</h4>
-            <p className="warning">
-              <b>Scope.</b> The diffeomorphisms are unmarked. They are not asserted to preserve the displayed fibrations, sections, fiber-sum necks, gluing coordinates, or surgery tori. The WebGL objects are explanatory 3D models, not literal four-dimensional embeddings.
+        <main className="theorem-layout">
+          <section className="theorem-intro">
+            <span>THE HEADLINE</span>
+            <h1>
+              Different fibrations.
+              <em>Same smooth 4-manifold.</em>
+            </h1>
+            <p>
+              The surface remains fixed. Only the test curve moves under the annular map d<sup>n</sup>. The visible winding explains the geometry; the Mess abelianization supplies the theorem certificate.
             </p>
           </section>
-        </aside>
+
+          <section className="visual-card">
+            <div className="visual-card-header">
+              <span>{view === '3d' ? 'ORBITABLE SURFACE MODEL' : 'ANNULAR COORDINATE MODEL'}</span>
+              <div className="curve-key" aria-label="Curve legend">
+                <span><i className="delta" />δ fixed</span>
+                <span><i className="current" />d<sup>n</sup>(a)</span>
+                <span><i className="ghost" />original a</span>
+              </div>
+            </div>
+
+            <div className="visual-stage">
+              {visualElement}
+              <div className={`visual-transition ${visual.animating ? 'on' : ''}`}>
+                annulus active: d<sup>{visual.from}</sup>(a) → d<sup>{visual.to}</sup>(a)
+              </div>
+            </div>
+
+            <div className="n-control">
+              <button
+                onClick={() => setSelectedN((value) => Math.max(MIN_N, value - 1))}
+                disabled={selectedN === MIN_N}
+                aria-label="Decrease n"
+              >
+                −
+              </button>
+              <div className="n-value">
+                <span>one mathematical control</span>
+                <strong>n = {selectedN}</strong>
+              </div>
+              <button
+                onClick={() => setSelectedN((value) => Math.min(MAX_N, value + 1))}
+                disabled={selectedN === MAX_N}
+                aria-label="Increase n"
+              >
+                +
+              </button>
+              <label className="n-slider-wrap">
+                <span>{MIN_N}</span>
+                <input
+                  type="range"
+                  min={MIN_N}
+                  max={MAX_N}
+                  step="1"
+                  value={selectedN}
+                  onChange={(event) => setSelectedN(Number(event.target.value))}
+                  aria-label="Select Dehn twist exponent n"
+                />
+                <span>+{MAX_N}</span>
+              </label>
+            </div>
+          </section>
+
+          <aside className="certificate-card">
+            <span>THEOREM CERTIFICATE</span>
+            <div className="certificate-formula"><WordFormula n={selectedN} /></div>
+            <dl className="certificate-rows">
+              <div><dt>Selected n</dt><dd>{selectedN}</dd></div>
+              <div><dt>Twist</dt><dd><Power exponent={selectedN} /></dd></div>
+              <div><dt>{messLabel}</dt><dd>{absoluteN}</dd></div>
+              <div><dt>Fibration class</dt><dd className="highlight">|n| = {absoluteN}</dd></div>
+            </dl>
+            {selectedN < 0 && (
+              <p className="negative-note">Same fibration class as n = +{absoluteN}; the visible twist direction is reversed.</p>
+            )}
+            <p className="integrity-note">
+              <b>Visual evidence:</b> the chosen test curve a is transformed by the standard annular formula. <b>Theorem evidence:</b> Mess abelianization—not this one curve—proves W<sub>m</sub> ≅ W<sub>n</sub> iff |m| = |n|.
+            </p>
+          </aside>
+
+          <section className="contrast-card" aria-label="Different fibrations on the same smooth manifold">
+            <div className="contrast-side">
+              <div className="fibration-glyph"><span>|n|={absoluteN}</span></div>
+              <div>
+                <span className="contrast-label">MESS DETECTS THE TWIST</span>
+                <h3>Different fibrations</h3>
+                <p><WordFormula n={selectedN} /></p>
+              </div>
+            </div>
+
+            <div className="absorb-arrow">
+              <b>ambient extension</b>
+              <i />
+              <span>Φ<sup>{selectedN}</sup> absorbs d<sup>{selectedN}</sup></span>
+            </div>
+
+            <div className="contrast-side">
+              <div className="elliptic-glyph">E(1,1)</div>
+              <div>
+                <span className="contrast-label">THE BARBELL ABSORBS THE TWIST</span>
+                <h3>Same smooth 4-manifold</h3>
+                <p>X<sub>{selectedN}</sub> ≅<sup>+</sup> E(1,1)</p>
+              </div>
+            </div>
+          </section>
+
+          <button className="proof-launch" onClick={() => setProofOpen(true)}>
+            Why can the manifold absorb the twist?
+          </button>
+        </main>
+
+        <BarbellProof open={proofOpen} onClose={() => setProofOpen(false)} n={selectedN} />
       </div>
     </>
   );
