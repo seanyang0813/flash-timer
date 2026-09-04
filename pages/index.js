@@ -1,79 +1,175 @@
-// import ref
-import { useRef, useEffect } from "react";
-import { useRouter } from "next/router";
-import io from "socket.io-client";
+import Head from 'next/head';
+import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/router';
+import DehnTwistWebGL from '../components/DehnTwistWebGL';
+import FlattenTwist from '../components/FlattenTwist';
+import TheoremJourney from '../components/TheoremJourney';
 
-const socket = io("https://flash-timer-server-production.up.railway.app/");
-// const socket = io("http://localhost:3001");
+const MIN_N = -6;
+const MAX_N = 6;
+const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+const ease = (value) => {
+  const t = clamp(value, 0, 1);
+  return t * t * (3 - 2 * t);
+};
 
-export default function Example() {
-  // get ref of the input
-  const inputRef = useRef(null);
-  const router = useRouter();
-
-  function join() {
-    console.log("join", inputRef.current.value);
-    // change route to inputRef.current.value
-    if (inputRef.current.value == "") {
-      return;
-    }
-    router.push(`/room/${inputRef.current.value}`);
-  }
-
-  function startNew() {
-    console.log("start new");
-    socket.emit("join", -1);
-  }
-
-  // register for callback from server for assigning room based on socket.emit("room-number", {
-  //   room: room,
-  // });
+function useSteppedTwist(target, instant) {
+  const animationRef = useRef({ target, value: target, from: target, to: target, phase: 1, active: false, waitUntil: 0, instant });
+  const [visual, setVisual] = useState({ value: target, pulse: 0, from: target, to: target, animating: false });
   useEffect(() => {
-    socket.on("room-number", (payload) => {
-      console.log("room-number", payload);
-      router.push(`/room/${payload.room}`);
-    });
-    return () => {
-      socket.off("room-number");
+    const state = animationRef.current;
+    state.target = target;
+    state.instant = instant;
+    if (instant) {
+      state.value = target; state.from = target; state.to = target; state.phase = 1; state.active = false;
+      setVisual({ value: target, pulse: 0, from: target, to: target, animating: false });
+    }
+  }, [target, instant]);
+  useEffect(() => {
+    let frameId;
+    let previous = performance.now();
+    const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    const frame = (now) => {
+      const state = animationRef.current;
+      const delta = Math.min(50, now - previous);
+      previous = now;
+      if (state.instant || reducedMotion) {
+        if (state.value !== state.target || state.active) {
+          state.value = state.target; state.from = state.target; state.to = state.target; state.phase = 1; state.active = false;
+          setVisual({ value: state.target, pulse: 0, from: state.target, to: state.target, animating: false });
+        }
+        frameId = requestAnimationFrame(frame); return;
+      }
+      if (!state.active && now >= state.waitUntil && Math.round(state.value) !== state.target) {
+        state.from = Math.round(state.value); state.to = state.from + Math.sign(state.target - state.from); state.phase = 0; state.active = true;
+      }
+      if (state.active) {
+        state.phase = Math.min(1, state.phase + delta / 1120);
+        const curvePhase = ease(clamp((state.phase - 0.12) / 0.76, 0, 1));
+        state.value = state.from + (state.to - state.from) * curvePhase;
+        const pulse = Math.sin(Math.PI * state.phase);
+        setVisual({ value: state.value, pulse, from: state.from, to: state.to, animating: true });
+        if (state.phase >= 1) {
+          state.value = state.to; state.active = false; state.waitUntil = now + 135;
+          setVisual({ value: state.value, pulse: 0, from: state.to, to: state.to, animating: state.value !== state.target });
+        }
+      }
+      frameId = requestAnimationFrame(frame);
     };
+    frameId = requestAnimationFrame(frame);
+    return () => cancelAnimationFrame(frameId);
   }, []);
+  return visual;
+}
+
+function Power({ base = 'd', exponent }) { return <>{base}<sup>{exponent}</sup></>; }
+function WordFormula({ n }) { return <span>W<sub>{n}</sub> = F F<sup><Power exponent={n} /></sup></span>; }
+
+export default function MatsumotoClarity() {
+  const router = useRouter();
+  const explorerRef = useRef(null);
+  const [selectedN, setSelectedN] = useState(0);
+  const [view, setView] = useState('flat');
+  const [clean, setClean] = useState(false);
+
+  useEffect(() => {
+    if (!router.isReady) return;
+    const rawN = Array.isArray(router.query.n) ? router.query.n[0] : router.query.n;
+    const parsedN = Number.parseInt(rawN ?? '0', 10);
+    if (Number.isFinite(parsedN)) setSelectedN(clamp(parsedN, MIN_N, MAX_N));
+    const rawView = Array.isArray(router.query.view) ? router.query.view[0] : router.query.view;
+    setView(rawView === '3d' ? '3d' : 'flat');
+    const rawClean = Array.isArray(router.query.clean) ? router.query.clean[0] : router.query.clean;
+    setClean(rawClean === '1');
+  }, [router.isReady, router.query.clean, router.query.n, router.query.view]);
+
+  useEffect(() => {
+    if (!router.isReady || clean || typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    url.searchParams.set('n', String(selectedN));
+    url.searchParams.set('view', view);
+    url.searchParams.delete('clean');
+    window.history.replaceState(null, '', url.toString());
+  }, [clean, router.isReady, selectedN, view]);
+
+  const visual = useSteppedTwist(selectedN, clean);
+  const absoluteN = Math.abs(selectedN);
+  const displayedStep = visual.animating ? visual.to : selectedN;
+  const messLabel = selectedN < 0 ? 'Mess content magnitude' : 'Mess content';
+  const visualElement = view === 'flat'
+    ? <FlattenTwist twist={visual.value} pulse={visual.pulse} targetN={displayedStep} clean={clean} />
+    : <DehnTwistWebGL twist={visual.value} pulse={visual.pulse} targetN={displayedStep} clean={clean} />;
+
+  const openExplorer = () => {
+    setSelectedN(3);
+    setView('flat');
+    window.requestAnimationFrame(() => explorerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  };
+
+  const openProofInspector = () => router.push('/proof');
+
+  if (clean) {
+    return <><Head><title>Dehn twist d^{selectedN}</title><meta name="theme-color" content="#05070c" /><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" /></Head><main className="clean-capture">{visualElement}</main></>;
+  }
 
   return (
-    <div className="isolate -space-y-px rounded-md shadow-sm grid place-items-center h-screen">
-      <div>
-        <div className="inline-flex items-center">
-          <div className="relative rounded-md  rounded-b-none border border-gray-300 px-3 py-2 focus-within:z-10 focus-within:border-blue-600 focus-within:ring-1 focus-within:ring-indigo-600">
-            <label
-              htmlFor="room"
-              className="block text-xs font-medium text-gray-900"
-            >
-              Room
-            </label>
-            <input
-              type="number"
-              name="room"
-              id="room"
-              className="block border-0 p-0 text-gray-900 placeholder-gray-500 focus:ring-0 sm:text-sm"
-              placeholder="123"
-              ref={inputRef}
-            />
+    <>
+      <Head>
+        <title>Matsumoto power twists — guided visual theorem</title>
+        <meta name="description" content="A guided geometric sequence that first makes d^n visible, then explains the |n| fibration classification and the ambient barbell absorption." />
+        <meta name="theme-color" content="#05070c" />
+        <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content" />
+      </Head>
+      <div className="clarity-page">
+        <header className="clarity-header">
+          <button className="clarity-brand" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}><i /><span>MATSUMOTO POWER TWISTS</span></button>
+          <button type="button" className="header-guided-label" onClick={openProofInspector}>PROOF INSPECTOR →</button>
+        </header>
+
+        <TheoremJourney onExplore={openExplorer} onTechnicalProof={openProofInspector} />
+
+        <section ref={explorerRef} id="explore" className="explorer-anchor">
+          <div className="explorer-heading">
+            <div><span>SECONDARY EXPLORATION</span><h2>Now choose arbitrary n.</h2></div>
+            <p>The guided sequence establishes the meaning of dⁿ first. This control is for exploration after the geometric operation is already clear.</p>
+            <div className="view-toggle" aria-label="Visualization mode">
+              <button className={view === 'flat' ? 'active' : ''} onClick={() => setView('flat')}>Flatten twist</button>
+              <button className={view === '3d' ? 'active' : ''} onClick={() => setView('3d')}>Orbit surface</button>
+            </div>
           </div>
-          <button
-            className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-6 mx-5 rounded-full h-10  "
-            onClick={join}
-          >
-            Join
-          </button>
-        </div>
-        <div className="grid justify-items-center my-4">
-          <button
-            className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-full"
-            onClick={startNew}
-          >
-            Start new
-          </button>
-        </div>
+        </section>
+
+        <main className="theorem-layout explorer-layout">
+          <section className="visual-card">
+            <div className="visual-card-header">
+              <span>{view === '3d' ? 'ORBITABLE SURFACE MODEL' : 'ANNULAR COORDINATE MODEL'}</span>
+              <div className="curve-key" aria-label="Curve legend"><span><i className="delta" />δ fixed</span><span><i className="current" />d<sup>n</sup>(a)</span><span><i className="ghost" />original a</span></div>
+            </div>
+            <div className="visual-stage">{visualElement}<div className={`visual-transition ${visual.animating ? 'on' : ''}`}>annulus active: d<sup>{visual.from}</sup>(a) → d<sup>{visual.to}</sup>(a)</div></div>
+            <div className="n-control">
+              <button onClick={() => setSelectedN((value) => Math.max(MIN_N, value - 1))} disabled={selectedN === MIN_N} aria-label="Decrease n">−</button>
+              <div className="n-value"><span>exploration control</span><strong>n = {selectedN}</strong></div>
+              <button onClick={() => setSelectedN((value) => Math.min(MAX_N, value + 1))} disabled={selectedN === MAX_N} aria-label="Increase n">+</button>
+              <label className="n-slider-wrap"><span>{MIN_N}</span><input type="range" min={MIN_N} max={MAX_N} step="1" value={selectedN} onChange={(event) => setSelectedN(Number(event.target.value))} aria-label="Select Dehn twist exponent n" /><span>+{MAX_N}</span></label>
+            </div>
+          </section>
+
+          <aside className="certificate-card">
+            <span>THEOREM CERTIFICATE</span>
+            <div className="certificate-formula"><WordFormula n={selectedN} /></div>
+            <dl className="certificate-rows"><div><dt>Selected n</dt><dd>{selectedN}</dd></div><div><dt>Twist</dt><dd><Power exponent={selectedN} /></dd></div><div><dt>{messLabel}</dt><dd>{absoluteN}</dd></div><div><dt>Fibration class</dt><dd className="highlight">|n| = {absoluteN}</dd></div></dl>
+            {selectedN < 0 && <p className="negative-note">Same fibration class as n = +{absoluteN}; the visible twist direction is reversed.</p>}
+            <p className="integrity-note"><b>Visual geometry:</b> the test curve a is transformed by the standard annular formula. <b>Theorem certificate:</b> Mess abelianization—not the picture alone—proves W<sub>m</sub> ≅ W<sub>n</sub> iff |m| = |n|.</p>
+          </aside>
+
+          <section className="contrast-card" aria-label="Different fibrations on the same smooth manifold">
+            <div className="contrast-side"><div className="fibration-glyph"><span>|n|={absoluteN}</span></div><div><span className="contrast-label">MESS DETECTS THE TWIST</span><h3>Different fibrations</h3><p><WordFormula n={selectedN} /></p></div></div>
+            <div className="absorb-arrow"><b>ambient extension</b><i /><span>Φ<sup>{selectedN}</sup> absorbs d<sup>{selectedN}</sup></span></div>
+            <div className="contrast-side"><div className="elliptic-glyph">E(1,1)</div><div><span className="contrast-label">THE BARBELL ABSORBS THE TWIST</span><h3>Same smooth 4-manifold</h3><p>X<sub>{selectedN}</sub> ≅<sup>+</sup> E(1,1)</p></div></div>
+          </section>
+          <button className="proof-launch" onClick={openProofInspector}>Open the full proof inspector</button>
+        </main>
       </div>
-    </div>
+    </>
   );
 }

@@ -1,4 +1,8 @@
 import "../styles/globals.css";
+import "../styles/matsumotoClarity.css";
+import "../styles/theoremJourney.css";
+import "../styles/theoremJourneyOverrides.css";
+import "../styles/proofInspector.css";
 import type { AppProps } from "next/app";
 
 export default function App({ Component, pageProps }: AppProps) {
