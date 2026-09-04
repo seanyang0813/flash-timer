@@ -4,6 +4,7 @@ import { useRouter } from 'next/router';
 import DehnTwistWebGL from '../components/DehnTwistWebGL';
 import FlattenTwist from '../components/FlattenTwist';
 import BarbellProof from '../components/BarbellProof';
+import TheoremStory from '../components/TheoremStory';
 
 const MIN_N = -6;
 const MAX_N = 6;
@@ -127,6 +128,7 @@ function WordFormula({ n }) {
 
 export default function MatsumotoClarity() {
   const router = useRouter();
+  const explorerRef = useRef(null);
   const [selectedN, setSelectedN] = useState(0);
   const [view, setView] = useState('3d');
   const [clean, setClean] = useState(false);
@@ -175,6 +177,13 @@ export default function MatsumotoClarity() {
       />
     );
 
+  const openExplorer = () => {
+    setSelectedN(3);
+    window.requestAnimationFrame(() => {
+      explorerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  };
+
   if (clean) {
     return (
       <>
@@ -194,7 +203,7 @@ export default function MatsumotoClarity() {
         <title>Matsumoto power twists — visual theorem</title>
         <meta
           name="description"
-          content="A mathematically explicit visualization of the separating Dehn twist d^n, the |n| fibration classification, and the fixed total space E(1,1)."
+          content="An eight-frame geometric story of the separating Dehn twist d^n, the |n| fibration classification, and the fixed total space E(1,1)."
         />
         <meta name="theme-color" content="#05070c" />
         <meta
@@ -209,24 +218,34 @@ export default function MatsumotoClarity() {
             <i />
             <span>MATSUMOTO POWER TWISTS</span>
           </button>
-          <div className="view-toggle" aria-label="Visualization mode">
-            <button className={view === '3d' ? 'active' : ''} onClick={() => setView('3d')}>3D surface</button>
-            <button className={view === 'flat' ? 'active' : ''} onClick={() => setView('flat')}>Flatten twist</button>
+          <div className="header-actions">
+            <button onClick={openExplorer}>Explore n</button>
+            <button className="primary" onClick={() => setProofOpen(true)}>Barbell proof</button>
           </div>
         </header>
 
-        <main className="theorem-layout">
-          <section className="theorem-intro">
-            <span>THE HEADLINE</span>
-            <h1>
-              Different fibrations.
-              <em>Same smooth 4-manifold.</em>
-            </h1>
-            <p>
-              The surface remains fixed. Only the test curve moves under the annular map d<sup>n</sup>. The visible winding explains the geometry; the Mess abelianization supplies the theorem certificate.
-            </p>
-          </section>
+        <TheoremStory
+          onExplore={openExplorer}
+          onProof={() => setProofOpen(true)}
+        />
 
+        <section ref={explorerRef} id="explore" className="explorer-anchor">
+          <div className="explorer-heading">
+            <div>
+              <span>AFTER THE STORY</span>
+              <h2>Explore arbitrary n.</h2>
+            </div>
+            <p>
+              The guided sequence uses n = 3 so each geometric transition is visible. Here the same annular transformation is evaluated for every integer from −6 to 6.
+            </p>
+            <div className="view-toggle" aria-label="Visualization mode">
+              <button className={view === '3d' ? 'active' : ''} onClick={() => setView('3d')}>3D surface</button>
+              <button className={view === 'flat' ? 'active' : ''} onClick={() => setView('flat')}>Flatten twist</button>
+            </div>
+          </div>
+        </section>
+
+        <main className="theorem-layout explorer-layout">
           <section className="visual-card">
             <div className="visual-card-header">
               <span>{view === '3d' ? 'ORBITABLE SURFACE MODEL' : 'ANNULAR COORDINATE MODEL'}</span>
@@ -253,7 +272,7 @@ export default function MatsumotoClarity() {
                 −
               </button>
               <div className="n-value">
-                <span>one mathematical control</span>
+                <span>exploration control</span>
                 <strong>n = {selectedN}</strong>
               </div>
               <button
