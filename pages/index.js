@@ -3,7 +3,6 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
 import DehnTwistWebGL from '../components/DehnTwistWebGL';
 import FlattenTwist from '../components/FlattenTwist';
-import BarbellProof from '../components/BarbellProof';
 import TheoremJourney from '../components/TheoremJourney';
 
 const MIN_N = -6;
@@ -72,7 +71,6 @@ export default function MatsumotoClarity() {
   const [selectedN, setSelectedN] = useState(0);
   const [view, setView] = useState('flat');
   const [clean, setClean] = useState(false);
-  const [proofOpen, setProofOpen] = useState(false);
 
   useEffect(() => {
     if (!router.isReady) return;
@@ -108,6 +106,8 @@ export default function MatsumotoClarity() {
     window.requestAnimationFrame(() => explorerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
   };
 
+  const openProofInspector = () => router.push('/proof');
+
   if (clean) {
     return <><Head><title>Dehn twist d^{selectedN}</title><meta name="theme-color" content="#05070c" /><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" /></Head><main className="clean-capture">{visualElement}</main></>;
   }
@@ -123,10 +123,10 @@ export default function MatsumotoClarity() {
       <div className="clarity-page">
         <header className="clarity-header">
           <button className="clarity-brand" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}><i /><span>MATSUMOTO POWER TWISTS</span></button>
-          <div className="header-guided-label">GUIDED GEOMETRIC STORY</div>
+          <button type="button" className="header-guided-label" onClick={openProofInspector}>PROOF INSPECTOR →</button>
         </header>
 
-        <TheoremJourney onExplore={openExplorer} onTechnicalProof={() => setProofOpen(true)} />
+        <TheoremJourney onExplore={openExplorer} onTechnicalProof={openProofInspector} />
 
         <section ref={explorerRef} id="explore" className="explorer-anchor">
           <div className="explorer-heading">
@@ -167,9 +167,8 @@ export default function MatsumotoClarity() {
             <div className="absorb-arrow"><b>ambient extension</b><i /><span>Φ<sup>{selectedN}</sup> absorbs d<sup>{selectedN}</sup></span></div>
             <div className="contrast-side"><div className="elliptic-glyph">E(1,1)</div><div><span className="contrast-label">THE BARBELL ABSORBS THE TWIST</span><h3>Same smooth 4-manifold</h3><p>X<sub>{selectedN}</sub> ≅<sup>+</sup> E(1,1)</p></div></div>
           </section>
-          <button className="proof-launch" onClick={() => setProofOpen(true)}>Open the technical barbell proof</button>
+          <button className="proof-launch" onClick={openProofInspector}>Open the full proof inspector</button>
         </main>
-        <BarbellProof open={proofOpen} onClose={() => setProofOpen(false)} n={selectedN} />
       </div>
     </>
   );
