@@ -200,7 +200,7 @@ export default function MatsumotoThreeD() {
           ))}
         </nav>
 
-        <div className="orbit-hint">drag to orbit · wheel to zoom · double-click to reset</div>
+        <div className="orbit-hint">drag to orbit · pinch / wheel to zoom · double-tap to reset</div>
 
         <aside className={scopeOpen ? 'open' : ''}>
           <button className="backdrop" onClick={() => setScopeOpen(false)} aria-label="Close" />
