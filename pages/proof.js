@@ -1,4 +1,5 @@
 import Head from 'next/head';
+import Link from 'next/link';
 import { useMemo, useRef, useState } from 'react';
 import ProofDependencyGraph from '../components/ProofDependencyGraph';
 import ProofNodeInspector from '../components/ProofNodeInspector';
@@ -192,7 +193,7 @@ export default function ProofInspectorPage() {
 
       <div className={`proof-page ${hostile ? 'hostile-mode' : ''}`}>
         <header className="proof-page-nav">
-          <a href="/" className="proof-back-link">← Main visualization</a>
+          <Link href="/" className="proof-back-link">← Main visualization</Link>
           <span>MATHEMATICAL NOTEBOOK</span>
           <div className="audit-mode-toggle" role="group" aria-label="Audit mode">
             <button className={!hostile ? 'active' : ''} onClick={() => setHostile(false)}>Normal proof</button>
@@ -254,7 +255,7 @@ export default function ProofInspectorPage() {
         </main>
 
         <footer className="proof-page-footer">
-          <a href="/">Return to the transformation-first visualization</a>
+          <Link href="/">Return to the transformation-first visualization</Link>
           <span>No claim that the diffeomorphisms preserve the displayed fibrations, sections, necks, gluing coordinates, or surgery tori.</span>
         </footer>
       </div>
