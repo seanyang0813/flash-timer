@@ -79,7 +79,7 @@ export default function MatsumotoThreeD() {
         <meta name="theme-color" content="#05060e" />
         <meta
           name="viewport"
-          content="width=device-width, initial-scale=1, viewport-fit=cover"
+          content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
         />
       </Head>
 
@@ -111,14 +111,18 @@ export default function MatsumotoThreeD() {
               <button onClick={() => setTwist((value) => Math.max(-6, value - 1))}>−</button>
               <strong>n = {twist}</strong>
               <button onClick={() => setTwist((value) => Math.min(6, value + 1))}>+</button>
-              <input
-                aria-label="Twist exponent n"
-                type="range"
-                min="-6"
-                max="6"
-                value={twist}
-                onChange={(event) => setTwist(Number(event.target.value))}
-              />
+              <div className="twist-range">
+                <span>−6</span>
+                <input
+                  aria-label="Twist exponent n"
+                  type="range"
+                  min="-6"
+                  max="6"
+                  value={twist}
+                  onChange={(event) => setTwist(Number(event.target.value))}
+                />
+                <span>+6</span>
+              </div>
             </div>
           )}
 
@@ -200,7 +204,7 @@ export default function MatsumotoThreeD() {
           ))}
         </nav>
 
-        <div className="orbit-hint">drag to orbit · pinch / wheel to zoom · double-tap to reset</div>
+        <div className="orbit-hint">one finger orbit · two fingers zoom · ↺ reset</div>
 
         <aside className={scopeOpen ? 'open' : ''}>
           <button className="backdrop" onClick={() => setScopeOpen(false)} aria-label="Close" />
